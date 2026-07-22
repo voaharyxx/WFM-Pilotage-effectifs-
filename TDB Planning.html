@@ -1,0 +1,1765 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pilotage WFM — Couverture &amp; Effectifs</title>
+
+<!-- ==================== CDN : SheetJS (import Excel) ==================== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- ==================== CDN : Chart.js (graphiques) ==================== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<!-- ==================== CDN : jsPDF + autotable (export PDF) ==================== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+/* ============================================================
+   TDB PLANNING — WFM COVERAGE COCKPIT
+   Design tokens : marine / blanc / vert kpi / orange / rouge
+   ============================================================ */
+:root{
+  --navy-950:#071427;
+  --navy-900:#0A1F3D;
+  --navy-800:#0F2C52;
+  --navy-700:#163a68;
+  --navy-600:#1f4a80;
+  --navy-500:#2c5da0;
+  --accent:#3B7DDE;
+  --accent-light:#DCEAFC;
+  --bg:#EEF2F7;
+  --surface:#FFFFFF;
+  --surface-alt:#F6F8FB;
+  --border:#DCE3ED;
+  --border-soft:#E9EDF3;
+  --text-900:#0E1B2C;
+  --text-700:#33445C;
+  --text-500:#63728A;
+  --text-400:#8C99AE;
+  --green:#178A4C;
+  --green-bg:#E5F6EC;
+  --green-line:#1FAE63;
+  --orange:#B8690A;
+  --orange-bg:#FCEFDD;
+  --orange-line:#F0921E;
+  --red:#C22B2B;
+  --red-bg:#FBE7E7;
+  --red-line:#E14343;
+  --blue-surplus:#2454B0;
+  --blue-surplus-bg:#E6EDFB;
+  --shadow-sm:0 1px 2px rgba(10,31,61,.06), 0 1px 1px rgba(10,31,61,.04);
+  --shadow-md:0 4px 14px rgba(10,31,61,.08), 0 2px 4px rgba(10,31,61,.05);
+  --shadow-lg:0 12px 32px rgba(10,31,61,.14), 0 4px 10px rgba(10,31,61,.06);
+  --radius-sm:8px;
+  --radius-md:12px;
+  --radius-lg:18px;
+  --font: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono: "SF Mono",Consolas,"Liberation Mono",Menlo,monospace;
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  font-family:var(--font);
+  background:var(--bg);
+  color:var(--text-900);
+  -webkit-font-smoothing:antialiased;
+  font-size:14px;
+  line-height:1.45;
+}
+::selection{background:var(--accent-light);color:var(--navy-900);}
+button{font-family:inherit;}
+a{color:var(--accent);}
+h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:-.01em;}
+p{margin:0;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#C3CEDC;border-radius:10px;}
+::-webkit-scrollbar-thumb:hover{background:#A9B7CB;}
+
+/* ---------- App shell ---------- */
+#app{display:flex;flex-direction:column;min-height:100vh;}
+
+/* ---------- Top header ---------- */
+.topbar{
+  background:linear-gradient(135deg,var(--navy-900) 0%, var(--navy-800) 55%, var(--navy-700) 100%);
+  color:#fff;
+  padding:0 20px;
+  display:flex;
+  align-items:center;
+  gap:20px;
+  height:60px;
+  position:sticky;top:0;z-index:100;
+  box-shadow:var(--shadow-md);
+}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:16px;white-space:nowrap;}
+.brand .logo-mark{
+  width:30px;height:30px;border-radius:8px;
+  background:linear-gradient(135deg,var(--accent),#7FB0F2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:800;color:var(--navy-900);
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
+  flex-shrink:0;
+}
+.brand small{display:block;font-weight:500;font-size:10.5px;color:#B9C7DE;letter-spacing:.03em;}
+.top-tabs{display:flex;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none;}
+.top-tabs::-webkit-scrollbar{display:none;}
+.top-tab{
+  background:transparent;border:none;color:#B9C7DE;
+  padding:10px 14px;border-radius:8px;cursor:pointer;
+  font-size:13px;font-weight:600;white-space:nowrap;
+  display:flex;align-items:center;gap:7px;
+  transition:.15s;
+}
+.top-tab:hover{background:rgba(255,255,255,.08);color:#fff;}
+.top-tab.active{background:rgba(255,255,255,.14);color:#fff;}
+.top-tab .dot{width:6px;height:6px;border-radius:50%;background:var(--red-line);display:none;}
+.top-tab.has-alert .dot{display:inline-block;}
+.top-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.btn{
+  border:1px solid transparent;
+  border-radius:9px;
+  padding:8px 14px;
+  font-size:12.5px;
+  font-weight:700;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  transition:.15s;
+  white-space:nowrap;
+}
+.btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(59,125,222,.35);}
+.btn-primary:hover{background:#2E6BC4;}
+.btn-ghost{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.16);}
+.btn-ghost:hover{background:rgba(255,255,255,.16);}
+.btn-light{background:#fff;color:var(--navy-800);border-color:var(--border);}
+.btn-light:hover{background:var(--surface-alt);}
+.btn-outline{background:transparent;color:var(--navy-700);border-color:var(--border);}
+.btn-outline:hover{background:var(--surface-alt);}
+.btn-sm{padding:6px 10px;font-size:11.5px;border-radius:7px;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+
+/* ---------- Filter bar ---------- */
+.filterbar{
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  padding:10px 20px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  position:sticky;top:60px;z-index:90;
+  box-shadow:var(--shadow-sm);
+}
+.filterbar.hidden{display:none;}
+.f-group{display:flex;flex-direction:column;gap:3px;}
+.f-label{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text-400);}
+.f-select, .f-input{
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:6px 10px;
+  font-size:12.5px;
+  background:var(--surface-alt);
+  color:var(--text-900);
+  min-width:120px;
+  font-family:inherit;
+}
+.f-select:focus,.f-input:focus{outline:2px solid var(--accent-light);border-color:var(--accent);}
+.multiselect{position:relative;}
+.multiselect-btn{
+  border:1px solid var(--border);border-radius:8px;background:var(--surface-alt);
+  padding:6px 10px;font-size:12.5px;min-width:130px;text-align:left;cursor:pointer;
+  display:flex;justify-content:space-between;align-items:center;gap:6px;color:var(--text-900);
+}
+.multiselect-panel{
+  position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--border);
+  border-radius:10px;box-shadow:var(--shadow-lg);padding:8px;min-width:200px;max-height:260px;overflow:auto;
+  z-index:200;display:none;
+}
+.multiselect-panel.open{display:block;}
+.ms-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:12.5px;cursor:pointer;}
+.ms-item:hover{background:var(--surface-alt);}
+.ms-item input{accent-color:var(--accent);}
+.f-spacer{flex:1;}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;background:var(--accent-light);color:var(--navy-800);
+  border-radius:20px;padding:4px 10px 4px 12px;font-size:11.5px;font-weight:700;
+}
+.chip button{border:none;background:transparent;cursor:pointer;color:var(--navy-800);font-size:13px;line-height:1;}
+.reset-link{font-size:11.5px;font-weight:700;color:var(--accent);background:none;border:none;cursor:pointer;text-decoration:underline;}
+
+/* ---------- Main layout ---------- */
+main{flex:1;padding:20px;max-width:1500px;margin:0 auto;width:100%;}
+.view{display:none;animation:fadein .25s ease;}
+.view.active{display:block;}
+@keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+.section-title{display:flex;align-items:center;justify-content:space-between;margin:26px 0 12px;}
+.section-title:first-child{margin-top:0;}
+.section-title h2{font-size:16px;color:var(--navy-900);}
+.section-title .sub{font-size:12px;color:var(--text-500);font-weight:500;margin-top:2px;}
+.section-title .actions{display:flex;gap:8px;}
+
+/* ---------- Cards ---------- */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border-soft);
+  border-radius:var(--radius-md);
+  box-shadow:var(--shadow-sm);
+}
+.card-pad{padding:16px;}
+
+/* ---------- KPI grid ---------- */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+.kpi-card{
+  background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-md);
+  padding:14px 16px;box-shadow:var(--shadow-sm);position:relative;overflow:hidden;
+  transition:transform .15s, box-shadow .15s;
+}
+.kpi-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);}
+.kpi-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent);}
+.kpi-card.kpi-green::before{background:var(--green-line);}
+.kpi-card.kpi-orange::before{background:var(--orange-line);}
+.kpi-card.kpi-red::before{background:var(--red-line);}
+.kpi-card.kpi-navy::before{background:var(--navy-700);}
+.kpi-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.kpi-label{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-400);}
+.kpi-icon{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;background:var(--accent-light);flex-shrink:0;}
+.kpi-value{font-size:26px;font-weight:800;color:var(--navy-900);margin-top:6px;letter-spacing:-.02em;}
+.kpi-unit{font-size:13px;font-weight:600;color:var(--text-500);margin-left:3px;}
+.kpi-foot{font-size:11px;color:var(--text-500);margin-top:4px;font-weight:600;}
+.kpi-foot.up{color:var(--green);}
+.kpi-foot.down{color:var(--red);}
+
+/* ---------- Grid layouts ---------- */
+.grid-2{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.grid-2col{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:1000px){.grid-2,.grid-3,.grid-2col{grid-template-columns:1fr;}}
+
+.chart-card{padding:16px;}
+.chart-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.chart-head h3{font-size:13.5px;color:var(--navy-900);}
+.chart-head .legend-note{font-size:10.5px;color:var(--text-400);font-weight:600;}
+.chart-box{position:relative;height:280px;}
+.chart-box.tall{height:360px;}
+.chart-box.short{height:220px;}
+
+/* ---------- Score gauge ---------- */
+.score-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:8px 0;}
+.score-ring{position:relative;width:150px;height:150px;}
+.score-ring svg{transform:rotate(-90deg);}
+.score-num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.score-num .n{font-size:32px;font-weight:800;color:var(--navy-900);}
+.score-num .l{font-size:9.5px;font-weight:800;text-transform:uppercase;color:var(--text-400);letter-spacing:.05em;}
+.score-status{font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;}
+
+/* ---------- Tables ---------- */
+.table-wrap{overflow-x:auto;border-radius:var(--radius-md);border:1px solid var(--border-soft);}
+table{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;}
+thead th{
+  background:var(--navy-900);color:#fff;text-align:left;padding:9px 12px;
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:800;
+  position:sticky;top:0;white-space:nowrap;
+}
+tbody td{padding:8px 12px;border-bottom:1px solid var(--border-soft);white-space:nowrap;color:var(--text-700);}
+tbody tr:hover{background:var(--surface-alt);}
+tbody tr:last-child td{border-bottom:none;}
+.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:800;}
+.badge-red{background:var(--red-bg);color:var(--red);}
+.badge-orange{background:var(--orange-bg);color:var(--orange);}
+.badge-green{background:var(--green-bg);color:var(--green);}
+.badge-blue{background:var(--blue-surplus-bg);color:var(--blue-surplus);}
+.badge-grey{background:#EEF1F5;color:var(--text-500);}
+.search-mini{border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;width:200px;background:var(--surface-alt);}
+
+/* ---------- Alerts ---------- */
+.alert-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+@media(max-width:1000px){.alert-cols{grid-template-columns:1fr;}}
+.alert-col{border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--border-soft);background:#fff;}
+.alert-col-head{padding:12px 14px;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:space-between;}
+.alert-col-head .count{background:rgba(255,255,255,.35);border-radius:20px;padding:1px 9px;font-size:11.5px;}
+.alert-col.crit .alert-col-head{background:var(--red);color:#fff;}
+.alert-col.warn .alert-col-head{background:var(--orange);color:#fff;}
+.alert-col.ok .alert-col-head{background:var(--green);color:#fff;}
+.alert-list{max-height:520px;overflow-y:auto;}
+.alert-item{padding:11px 14px;border-bottom:1px solid var(--border-soft);}
+.alert-item:last-child{border-bottom:none;}
+.alert-item .a-title{font-size:12.5px;font-weight:700;color:var(--text-900);}
+.alert-item .a-meta{font-size:11px;color:var(--text-500);margin-top:3px;}
+.alert-empty{padding:22px 14px;text-align:center;color:var(--text-400);font-size:12px;}
+
+/* ---------- Recommendations ---------- */
+.reco-list{display:flex;flex-direction:column;gap:10px;}
+.reco-item{
+  display:flex;gap:12px;padding:14px;border-radius:var(--radius-md);
+  background:var(--surface-alt);border:1px solid var(--border-soft);
+  border-left:4px solid var(--accent);
+}
+.reco-item.high{border-left-color:var(--red-line);}
+.reco-item.med{border-left-color:var(--orange-line);}
+.reco-icon{width:32px;height:32px;border-radius:9px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.reco-body h4{font-size:13px;color:var(--navy-900);margin-bottom:3px;}
+.reco-body p{font-size:12px;color:var(--text-600);line-height:1.5;}
+.reco-body ul{margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--text-700);}
+.reco-body li{margin-bottom:2px;}
+
+/* ---------- Search interactif ---------- */
+.search-panel{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;}
+.result-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-top:16px;}
+.result-card{background:var(--surface-alt);border:1px solid var(--border-soft);border-radius:var(--radius-md);padding:14px;text-align:center;}
+.result-card .rv{font-size:24px;font-weight:800;color:var(--navy-900);}
+.result-card .rl{font-size:10.5px;font-weight:800;text-transform:uppercase;color:var(--text-400);margin-top:4px;letter-spacing:.04em;}
+
+/* ---------- Heatmap ---------- */
+.heatmap-scroll{overflow-x:auto;}
+.heatmap{border-collapse:collapse;font-size:10px;}
+.heatmap th{position:sticky;top:0;background:var(--navy-900);color:#fff;padding:4px 3px;font-weight:700;font-size:9px;}
+.heatmap td{width:20px;height:20px;text-align:center;border:1px solid rgba(255,255,255,.6);cursor:default;font-size:8.5px;color:rgba(0,0,0,.55);}
+.heatmap .rowlabel{background:var(--surface-alt);color:var(--text-700);font-weight:700;text-align:right;padding:0 8px;font-size:10px;position:sticky;left:0;}
+
+/* ---------- Import zone ---------- */
+.import-wrap{display:flex;align-items:center;justify-content:center;min-height:70vh;}
+.import-card{max-width:560px;width:100%;text-align:center;padding:40px 32px;}
+.dropzone{
+  border:2px dashed var(--border);border-radius:var(--radius-lg);padding:38px 20px;
+  cursor:pointer;transition:.15s;background:var(--surface-alt);
+}
+.dropzone:hover,.dropzone.dragover{border-color:var(--accent);background:var(--accent-light);}
+.dropzone .dz-icon{font-size:38px;margin-bottom:10px;}
+.dropzone h3{font-size:15px;color:var(--navy-900);margin-bottom:5px;}
+.dropzone p{font-size:12.5px;color:var(--text-500);}
+.import-log{text-align:left;margin-top:18px;font-size:12px;max-height:180px;overflow:auto;}
+.import-log .ok{color:var(--green);}
+.import-log .err{color:var(--red);}
+.import-log .warn{color:var(--orange);}
+.import-log div{padding:3px 0;border-bottom:1px dashed var(--border-soft);}
+
+/* ---------- Modal ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(10,20,40,.55);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;
+}
+.modal-overlay.open{display:flex;}
+.modal{background:#fff;border-radius:var(--radius-lg);max-width:640px;width:100%;max-height:85vh;overflow:auto;box-shadow:var(--shadow-lg);}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--border-soft);display:flex;justify-content:space-between;align-items:center;}
+.modal-head h3{font-size:15px;}
+.modal-body{padding:20px;}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-500);}
+
+/* ---------- Toast ---------- */
+.toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:1200;}
+.toast{background:var(--navy-900);color:#fff;padding:11px 16px;border-radius:9px;font-size:12.5px;font-weight:600;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:8px;animation:toastin .2s ease;}
+.toast.ok{background:var(--green);}
+.toast.err{background:var(--red);}
+@keyframes toastin{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* ---------- Empty state ---------- */
+.empty-state{padding:60px 20px;text-align:center;color:var(--text-400);}
+.empty-state .es-icon{font-size:34px;margin-bottom:10px;}
+
+.footer-note{text-align:center;color:var(--text-400);font-size:11px;padding:24px 0 10px;}
+
+/* ---------- Responsive ---------- */
+@media(max-width:760px){
+  .topbar{padding:0 10px;gap:10px;}
+  .brand small{display:none;}
+  main{padding:12px;}
+  .kpi-grid{grid-template-columns:repeat(2,1fr);}
+  .alert-cols{grid-template-columns:1fr;}
+  .filterbar{padding:8px 10px;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===================== TOP BAR ===================== -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo-mark">TB</div>
+      <div>
+        TDB Planning WFM
+        <small>Pilotage effectifs &amp; couverture</small>
+      </div>
+    </div>
+    <nav class="top-tabs" id="topTabs">
+      <button class="top-tab active" data-view="view-overview">📊 Vue d'ensemble</button>
+      <button class="top-tab" data-view="view-coverage">📐 Couverture</button>
+      <button class="top-tab" data-view="view-alerts">🚨 Alertes<span class="dot"></span></button>
+      <button class="top-tab" data-view="view-analysis">🧭 Analyse WFM</button>
+      <button class="top-tab" data-view="view-viz">📈 Visualisations</button>
+      <button class="top-tab" data-view="view-search">🔎 Recherche</button>
+      <button class="top-tab" data-view="view-employees">👥 Effectifs</button>
+    </nav>
+    <div class="top-actions">
+      <button class="btn btn-ghost btn-sm" id="btnReimport">⤴ Importer</button>
+      <button class="btn btn-primary btn-sm" id="btnExportMenu">⬇ Exporter</button>
+    </div>
+  </header>
+
+  <!-- ===================== FILTER BAR ===================== -->
+  <div class="filterbar hidden" id="filterbar">
+    <div class="f-group">
+      <span class="f-label">Date</span>
+      <select class="f-select" id="fDate"></select>
+    </div>
+    <div class="f-group">
+      <span class="f-label">Équipe</span>
+      <div class="multiselect" id="msEquipe">
+        <button class="multiselect-btn" type="button">Toutes <span>▾</span></button>
+        <div class="multiselect-panel"></div>
+      </div>
+    </div>
+    <div class="f-group">
+      <span class="f-label">Service</span>
+      <div class="multiselect" id="msService">
+        <button class="multiselect-btn" type="button">Tous <span>▾</span></button>
+        <div class="multiselect-panel"></div>
+      </div>
+    </div>
+    <div class="f-group">
+      <span class="f-label">Collaborateur</span>
+      <select class="f-select" id="fCollab" style="min-width:170px">
+        <option value="">Tous les collaborateurs</option>
+      </select>
+    </div>
+    <div class="f-group">
+      <span class="f-label">Granularité</span>
+      <select class="f-select" id="fGranularity">
+        <option value="day">Jour sélectionné</option>
+        <option value="week">Semaine (moyenne)</option>
+      </select>
+    </div>
+    <div class="f-spacer"></div>
+    <div class="f-group">
+      <span class="f-label">&nbsp;</span>
+      <button class="reset-link" id="btnResetFilters">Réinitialiser les filtres</button>
+    </div>
+  </div>
+
+  <main>
+
+    <!-- ===================== IMPORT VIEW ===================== -->
+    <div class="view active" id="view-import">
+      <div class="import-wrap">
+        <div class="card import-card">
+          <h1 style="font-size:20px;color:var(--navy-900);margin-bottom:6px;">Importer le fichier de planning</h1>
+          <p style="color:var(--text-500);font-size:13px;margin-bottom:22px;">
+            Chargez un classeur Excel contenant une feuille <strong>Planning</strong> et une ou plusieurs feuilles
+            <strong>Besoin ETP</strong>. L'analyse de couverture est générée automatiquement.
+          </p>
+          <div class="dropzone" id="dropzone">
+            <div class="dz-icon">📁</div>
+            <h3>Glissez-déposez votre fichier ici</h3>
+            <p>ou cliquez pour parcourir — formats .xlsx / .xls</p>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
+          </div>
+          <div class="import-log" id="importLog"></div>
+          <div id="importActions" style="margin-top:18px;display:none;">
+            <button class="btn btn-primary" id="btnLoadDashboard" style="width:100%;justify-content:center;">Ouvrir le tableau de bord →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== OVERVIEW ===================== -->
+    <div class="view" id="view-overview">
+      <div class="section-title">
+        <div><h2>Vue d'ensemble</h2><div class="sub">Indicateurs clés pour la période sélectionnée</div></div>
+      </div>
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <div class="grid-2" style="margin-top:16px;">
+        <div class="card chart-card">
+          <div class="chart-head">
+            <h3>Besoin ETP vs ETP planifié</h3>
+            <span class="legend-note">Zones rouge = sous-effectif · bleu = sur-effectif</span>
+          </div>
+          <div class="chart-box tall"><canvas id="chartMain"></canvas></div>
+        </div>
+        <div class="card chart-card">
+          <div class="chart-head"><h3>Score global de couverture</h3></div>
+          <div class="score-wrap" id="scoreWrap"></div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;font-size:12px;">
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-500);">Écart total ETP</span><strong id="statEcartTotal">–</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-500);">Manque total ETP</span><strong id="statManqueTotal" style="color:var(--red);">–</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-500);">Surplus total ETP</span><strong id="statSurplusTotal" style="color:var(--blue-surplus);">–</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-500);">Heure la plus critique</span><strong id="statHeureCritique">–</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-500);">Heure la plus surdimensionnée</span><strong id="statHeureSur">–</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title"><div><h2>Heatmap de couverture</h2><div class="sub">Toutes dates × toutes tranches horaires</div></div></div>
+      <div class="card card-pad heatmap-scroll">
+        <table class="heatmap" id="heatmapTable"></table>
+      </div>
+    </div>
+
+    <!-- ===================== COVERAGE VIEW ===================== -->
+    <div class="view" id="view-coverage">
+      <div class="section-title">
+        <div><h2>Comparaison Besoin ETP vs ETP planifié</h2><div class="sub">Détail par tranche de 30 minutes — <span id="coverageDateLabel"></span></div></div>
+        <div class="actions"><input class="search-mini" id="coverageSearch" placeholder="Filtrer une heure…"></div>
+      </div>
+      <div class="card chart-card" style="margin-bottom:14px;">
+        <div class="chart-box"><canvas id="chartCoverageDay"></canvas></div>
+      </div>
+      <div class="table-wrap card">
+        <table id="coverageTable">
+          <thead><tr>
+            <th>Heure</th><th class="num">Besoin ETP</th><th class="num">ETP Planifié</th><th class="num">Effectif réel</th><th class="num">Écart</th><th class="num">Couverture %</th><th>Statut</th>
+          </tr></thead>
+          <tbody id="coverageTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===================== ALERTS VIEW ===================== -->
+    <div class="view" id="view-alerts">
+      <div class="section-title">
+        <div><h2>Alertes intelligentes</h2><div class="sub">Détection automatique des anomalies de couverture et de planning</div></div>
+      </div>
+      <div class="alert-cols">
+        <div class="alert-col crit">
+          <div class="alert-col-head">🔴 Critique <span class="count" id="countCrit">0</span></div>
+          <div class="alert-list" id="listCrit"></div>
+        </div>
+        <div class="alert-col warn">
+          <div class="alert-col-head">🟠 À surveiller <span class="count" id="countWarn">0</span></div>
+          <div class="alert-list" id="listWarn"></div>
+        </div>
+        <div class="alert-col ok">
+          <div class="alert-col-head">🟢 Conforme <span class="count" id="countOk">0</span></div>
+          <div class="alert-list" id="listOk"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== ANALYSIS VIEW ===================== -->
+    <div class="view" id="view-analysis">
+      <div class="section-title"><div><h2>Analyse WFM avancée</h2><div class="sub">Synthèse statistique de la couverture</div></div></div>
+      <div class="kpi-grid" id="analysisKpiGrid"></div>
+
+      <div class="section-title"><div><h2>Recommandations automatiques</h2><div class="sub">Générées à partir des écarts détectés</div></div></div>
+      <div class="reco-list" id="recoList"></div>
+    </div>
+
+    <!-- ===================== VISUALIZATIONS VIEW ===================== -->
+    <div class="view" id="view-viz">
+      <div class="section-title"><div><h2>Visualisations</h2><div class="sub">Ensemble des graphiques d'analyse</div></div></div>
+      <div class="grid-2col">
+        <div class="card chart-card"><div class="chart-head"><h3>Courbe effectif horaire</h3></div><div class="chart-box"><canvas id="chartEffectif"></canvas></div></div>
+        <div class="card chart-card"><div class="chart-head"><h3>Répartition par équipe</h3></div><div class="chart-box"><canvas id="chartEquipe"></canvas></div></div>
+        <div class="card chart-card"><div class="chart-head"><h3>Répartition des heures collaborateurs</h3></div><div class="chart-box"><canvas id="chartHeuresCollab"></canvas></div></div>
+        <div class="card chart-card"><div class="chart-head"><h3>Analyse des écarts ETP</h3></div><div class="chart-box"><canvas id="chartEcarts"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- ===================== SEARCH VIEW ===================== -->
+    <div class="view" id="view-search">
+      <div class="section-title"><div><h2>Analyse interactive</h2><div class="sub">Recherchez une tranche horaire précise</div></div></div>
+      <div class="card card-pad">
+        <div class="search-panel">
+          <div class="f-group">
+            <span class="f-label">Date</span>
+            <select class="f-select" id="searchDate"></select>
+          </div>
+          <div class="f-group">
+            <span class="f-label">Heure</span>
+            <select class="f-select" id="searchHeure"></select>
+          </div>
+          <button class="btn btn-primary" id="btnSearchGo">Analyser</button>
+        </div>
+        <div class="result-grid" id="searchResults"></div>
+      </div>
+    </div>
+
+    <!-- ===================== EMPLOYEES VIEW ===================== -->
+    <div class="view" id="view-employees">
+      <div class="section-title">
+        <div><h2>Effectifs</h2><div class="sub" id="employeesSub">Liste des collaborateurs planifiés</div></div>
+        <div class="actions"><input class="search-mini" id="employeeSearch" placeholder="Rechercher un collaborateur…"></div>
+      </div>
+      <div class="table-wrap card">
+        <table id="employeesTable">
+          <thead><tr>
+            <th>Matricule</th><th>Nom &amp; prénom</th><th>Équipe</th><th>Service</th><th>Statut du jour</th><th class="num">Début</th><th class="num">Fin</th><th class="num">Pause</th><th class="num">Durée</th>
+          </tr></thead>
+          <tbody id="employeesTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="footer-note">TDB Planning WFM — traitement 100% local dans votre navigateur, aucune donnée transmise.</div>
+  </main>
+</div>
+
+<!-- ===================== EXPORT MODAL ===================== -->
+<div class="modal-overlay" id="exportModal">
+  <div class="modal">
+    <div class="modal-head"><h3>Exporter le tableau de bord</h3><button class="modal-close" id="closeExportModal">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--text-500);margin-bottom:16px;">Choisissez le format d'export. Les exports incluent les KPI, le tableau de couverture et les alertes de la sélection en cours.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button class="btn btn-outline" id="exportExcel" style="justify-content:flex-start;padding:12px 14px;">📊 Export Excel (.xlsx) — KPI, couverture, alertes</button>
+        <button class="btn btn-outline" id="exportCSV" style="justify-content:flex-start;padding:12px 14px;">📄 Export CSV — Tableau de couverture</button>
+        <button class="btn btn-outline" id="exportPDF" style="justify-content:flex-start;padding:12px 14px;">🖨 Export PDF — Rapport complet</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* ============================================================
+   TDB PLANNING WFM — LOGIQUE APPLICATIVE (JavaScript vanilla)
+   ============================================================ */
+(function(){
+"use strict";
+
+/* ------------------------------------------------------------
+   0. ETAT GLOBAL
+   ------------------------------------------------------------ */
+const STATE = {
+  employees: [],        // [{matricule, equipe, service, nom, days:[{date,status,workStart,workEnd,pauseStart,pauseEnd,dureeMin,raw}]}]
+  besoinMap: {},         // "YYYY-MM-DD|HH:MM" -> {besoin, queues:{name:val}}
+  besoinQueues: [],       // noms des files détectées
+  dates: [],             // liste triée des dates ISO présentes dans le planning
+  slots: [],             // 48 tranches ["00:00", "00:30", ...]
+  coverage: {},          // date -> [ {slot, besoin, planifie, reel, ecart, couverture} x48 ]
+  filters: { date: null, equipes: new Set(), services: new Set(), collab: "", granularity: "day" },
+  charts: {},            // instances Chart.js actives
+  alerts: { crit:[], warn:[], ok:[] },
+  loaded:false
+};
+
+const MONTHS_FR = {"janvier":0,"février":1,"fevrier":1,"mars":2,"avril":3,"mai":4,"juin":5,"juillet":6,"août":7,"aout":7,"septembre":8,"octobre":9,"novembre":10,"décembre":11,"decembre":11};
+
+/* ------------------------------------------------------------
+   1. UTILITAIRES
+   ------------------------------------------------------------ */
+function norm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase(); }
+function pad2(n){ return String(n).padStart(2,'0'); }
+function isoDate(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function fmtDateFR(iso){
+  const [y,m,d]=iso.split('-');
+  const dt=new Date(+y,+m-1,+d);
+  const days=['dim','lun','mar','mer','jeu','ven','sam'];
+  return days[dt.getDay()]+' '+d+'/'+m+'/'+y;
+}
+function minToHHMM(min){
+  min = ((min%1440)+1440)%1440;
+  return pad2(Math.floor(min/60))+':'+pad2(min%60);
+}
+function parseTimeStrToMinutes(v){
+  if(v==null) return null;
+  if(typeof v==='number'){ // fraction excel de journée
+    if(v>=0 && v<=1.5) return Math.round(v*1440)%1440;
+    return null;
+  }
+  const s=String(v).trim();
+  let m=s.match(/^(\d{1,2}):(\d{2})(:\d{2})?$/);
+  if(m) return (parseInt(m[1],10)*60+parseInt(m[2],10))%1440;
+  m=s.match(/^(\d{1,2})h(\d{2})?$/i);
+  if(m) return (parseInt(m[1],10)*60+parseInt(m[2]||'0',10))%1440;
+  return null;
+}
+function parseDurationStrToMinutes(v){
+  // Durée / pause : formatées comme une heure "HH:MM" représentant une durée
+  if(v==null) return 0;
+  if(typeof v==='number'){ if(v<=2) return Math.round(v*1440); return Math.round(v*60); }
+  const s=String(v).trim();
+  let m=s.match(/^(\d{1,3}):(\d{2})(:\d{2})?$/);
+  if(m) return parseInt(m[1],10)*60+parseInt(m[2],10);
+  return 0;
+}
+function isWorkToken(v){
+  if(v==null) return false;
+  const s=String(v).trim();
+  if(s==='') return false;
+  return /^\d{1,2}[:h]\d{2}/.test(s) || /^\d+(\.\d+)?$/.test(s);
+}
+function classifyToken(v){
+  const n = norm(v);
+  if(n==='') return 'vide';
+  if(n.includes('repos')) return 'repos';
+  if(n==='cp' || n.includes('conge') || n.includes('congé')) return 'conge';
+  if(isWorkToken(v)) return 'travail';
+  return 'autre';
+}
+function parseFrenchDateLabel(raw){
+  if(raw==null) return null;
+  if(raw instanceof Date) return isoDate(raw);
+  const s=String(raw).trim();
+  // formats: "lundi 20 juillet 2026" ou "20/07/2026" ou date excel formatée
+  let m = s.match(/(\d{1,2})\s+([a-zéû]+)\s+(\d{4})/i);
+  if(m){
+    const day=parseInt(m[1],10);
+    const mon = MONTHS_FR[norm(m[2])];
+    const year=parseInt(m[3],10);
+    if(mon!=null) return year+'-'+pad2(mon+1)+'-'+pad2(day);
+  }
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m) return m[3]+'-'+pad2(+m[1])+'-'+pad2(+m[2]);
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[0].slice(0,10);
+  const d = new Date(s);
+  if(!isNaN(d.getTime())) return isoDate(d);
+  return null;
+}
+function parseAnyDateCell(v){
+  if(v==null) return null;
+  if(v instanceof Date) return isoDate(v);
+  const s=String(v).trim();
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m) return m[3]+'-'+pad2(+m[1])+'-'+pad2(+m[2]);
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return m[1]+'-'+pad2(+m[2])+'-'+pad2(+m[3]);
+  const d=new Date(s);
+  if(!isNaN(d.getTime())) return isoDate(d);
+  return null;
+}
+function round1(n){ return Math.round(n*10)/10; }
+function round0(n){ return Math.round(n); }
+function couvColor(pct, hasBesoin){
+  if(!hasBesoin) return {bg:'#EEF1F5', fg:'var(--text-400)'};
+  if(pct<80) return {bg:'#C22B2B', fg:'#fff'};
+  if(pct<95) return {bg:'#F0921E', fg:'#fff'};
+  if(pct<=105) return {bg:'#1FAE63', fg:'#fff'};
+  if(pct<=130) return {bg:'#5B8DEF', fg:'#fff'};
+  return {bg:'#2454B0', fg:'#fff'};
+}
+function statusBadge(pct, hasBesoin){
+  if(!hasBesoin) return '<span class="badge badge-grey">Sans besoin</span>';
+  if(pct<80) return '<span class="badge badge-red">Critique</span>';
+  if(pct<95) return '<span class="badge badge-orange">Modéré</span>';
+  if(pct<=105) return '<span class="badge badge-green">Optimal</span>';
+  return '<span class="badge badge-blue">Sur-effectif</span>';
+}
+function toast(msg, type){
+  const wrap=document.getElementById('toastWrap');
+  const el=document.createElement('div');
+  el.className='toast'+(type?' '+type:'');
+  el.textContent=msg;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 3200);
+}
+
+/* génère les 48 tranches de 30 minutes */
+(function buildSlots(){
+  for(let i=0;i<48;i++) STATE.slots.push(minToHHMM(i*30));
+})();
+
+/* ------------------------------------------------------------
+   2. IMPORT & PARSING EXCEL
+   ------------------------------------------------------------ */
+const importLogEl = document.getElementById('importLog');
+function logImport(msg, cls){
+  const d=document.createElement('div');
+  d.className=cls||'';
+  d.textContent=msg;
+  importLogEl.appendChild(d);
+  importLogEl.scrollTop = importLogEl.scrollHeight;
+}
+
+function findPlanningSheetName(wb){
+  return wb.SheetNames.find(n=>norm(n).includes('planning')) || null;
+}
+function findBesoinSheetNames(wb){
+  return wb.SheetNames.filter(n=> norm(n).includes('besoin'));
+}
+
+function sheetToRows(wb, name){
+  const ws = wb.Sheets[name];
+  return XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:null});
+}
+
+/* ---- Parsing feuille Planning ---- */
+function parsePlanningSheet(rows){
+  let headerRowIdx=-1, nameCol=-1;
+  for(let r=0;r<Math.min(rows.length,15);r++){
+    const row=rows[r]||[];
+    for(let c=0;c<row.length;c++){
+      const n=norm(row[c]);
+      if(n==='nom et prenom' || n==='nom prenom' || n==='nom & prenom'){ headerRowIdx=r; nameCol=c; break; }
+    }
+    if(headerRowIdx>=0) break;
+  }
+  if(headerRowIdx<0){
+    logImport('✗ Impossible de localiser l\'entête "Nom et prénom" dans la feuille Planning.', 'err');
+    return [];
+  }
+  const headerRow = rows[headerRowIdx]||[];
+  const labelRow = rows[headerRowIdx-1]||[];
+
+  let equipeCol=-1, matriculeCol=-1, serviceCol=-1;
+  const before = nameCol;
+  if(before>=1) equipeCol = nameCol-1;
+  if(before>=2) matriculeCol = nameCol-2;
+  if(before>=3) serviceCol = nameCol-3;
+
+  // detection des blocs jour (Début/Fin/Pause/Durée x N jours)
+  const blocks=[];
+  let col=nameCol+1;
+  while(col < headerRow.length){
+    const h = norm(headerRow[col]);
+    if(h==='debut' || h==='début'){
+      let dayLabel=null;
+      for(let cc=col; cc<col+4 && cc<labelRow.length; cc++){ if(labelRow[cc]){ dayLabel=labelRow[cc]; break; } }
+      const date = parseFrenchDateLabel(dayLabel);
+      blocks.push({col, date, label: dayLabel});
+      col+=4;
+    } else break;
+  }
+  if(blocks.length===0){
+    logImport('✗ Aucun bloc journalier (Début/Fin/Pause/Durée) détecté.', 'err');
+    return [];
+  }
+  logImport('✓ '+blocks.length+' jour(s) détecté(s) dans le planning.', 'ok');
+
+  // colonnes additionnelles repos / heure semaine
+  let reposCol=-1, heureSemCol=-1;
+  const lastBlockEnd = blocks[blocks.length-1].col+4;
+  for(let c=lastBlockEnd;c<headerRow.length;c++){
+    const h=norm(headerRow[c]);
+    if(h.includes('repos')) reposCol=c;
+    if(h.includes('heure semaine') || h.includes('heures semaine')) heureSemCol=c;
+  }
+
+  const employees=[];
+  for(let r=headerRowIdx+1;r<rows.length;r++){
+    const row=rows[r]||[];
+    const nom = row[nameCol];
+    if(nom==null || String(nom).trim()==='') continue;
+    const emp = {
+      matricule: matriculeCol>=0 ? (row[matriculeCol]||'') : '',
+      equipe: equipeCol>=0 ? (row[equipeCol]||'Non renseigné') : 'Non renseigné',
+      service: serviceCol>=0 ? (row[serviceCol]|| (equipeCol>=0?row[equipeCol]:'Non renseigné')) : (equipeCol>=0?row[equipeCol]:'Non renseigné'),
+      nom: String(nom).trim(),
+      repos: reposCol>=0? row[reposCol] : null,
+      heureSemaine: heureSemCol>=0? row[heureSemCol] : null,
+      days: []
+    };
+    for(const b of blocks){
+      if(!b.date) continue;
+      const debutRaw = row[b.col], finRaw=row[b.col+1], pauseRaw=row[b.col+2], dureeRaw=row[b.col+3];
+      const status = classifyToken(debutRaw);
+      const day = { date:b.date, label:b.label, status, raw:{debut:debutRaw,fin:finRaw,pause:pauseRaw,duree:dureeRaw},
+                    workStart:null, workEnd:null, pauseStart:null, pauseEnd:null, dureeMin:0 };
+      if(status==='travail'){
+        const debutMin = parseTimeStrToMinutes(debutRaw);
+        let finMin = parseTimeStrToMinutes(finRaw);
+        // Le champ "Pause" contient l'HEURE DE DEBUT de la pause (heure d'horloge), pas une durée.
+        const pauseClockMin = parseTimeStrToMinutes(pauseRaw);
+        const dureeMin = parseDurationStrToMinutes(dureeRaw);
+        if(debutMin!=null && finMin!=null){
+          if(finMin<=debutMin) finMin += 1440; // franchissement de minuit
+          const shiftLenMin = finMin-debutMin;
+          const pauseDurMin = dureeMin>0 ? Math.max(0, shiftLenMin-dureeMin) : 0;
+          const [y,mo,da] = b.date.split('-').map(Number);
+          const dayMid = new Date(y,mo-1,da);
+          const workStart = new Date(dayMid.getTime()+debutMin*60000);
+          const workEnd = new Date(dayMid.getTime()+finMin*60000);
+          let pauseStart=null, pauseEnd=null;
+          if(pauseDurMin>0){
+            if(pauseClockMin!=null){
+              let pauseMinRel = pauseClockMin;
+              if(pauseMinRel < debutMin) pauseMinRel += 1440; // la pause tombe après minuit
+              pauseStart = new Date(dayMid.getTime()+pauseMinRel*60000);
+              pauseEnd = new Date(pauseStart.getTime()+pauseDurMin*60000);
+            } else {
+              // pas d'heure de pause connue : on centre la pause sur le milieu du poste
+              const mid = (workStart.getTime()+workEnd.getTime())/2;
+              pauseStart = new Date(mid - pauseDurMin*30000);
+              pauseEnd   = new Date(mid + pauseDurMin*30000);
+            }
+          }
+          day.workStart=workStart; day.workEnd=workEnd; day.pauseStart=pauseStart; day.pauseEnd=pauseEnd;
+          day.pauseDurMin=pauseDurMin; day.dureeMin= dureeMin || (shiftLenMin-pauseDurMin);
+        } else {
+          day.status='autre';
+        }
+      }
+      emp.days.push(day);
+    }
+    employees.push(emp);
+  }
+  logImport('✓ '+employees.length+' collaborateurs importés.', 'ok');
+  return employees;
+}
+
+/* ---- Parsing feuilles Besoin ETP ---- */
+function parseBesoinSheet(rows, queueLabel, besoinMap, queueSet){
+  let headerRowIdx=-1, dateCol=-1, heureDebCol=-1, heureFinCol=-1, besoinCol=-1;
+  for(let r=0;r<Math.min(rows.length,6);r++){
+    const row=rows[r]||[];
+    row.forEach((c,ci)=>{
+      const n=norm(c);
+      if(n==='date') dateCol=ci;
+      else if(n.includes('heure debut')) heureDebCol=ci;
+      else if(n.includes('heure fin')) heureFinCol=ci;
+      else if(n.includes('besoin etp')) besoinCol=ci;
+    });
+    if(dateCol>=0 && heureDebCol>=0 && besoinCol>=0){ headerRowIdx=r; break; }
+  }
+  if(headerRowIdx<0){
+    logImport('✗ Structure non reconnue pour la feuille "'+queueLabel+'" (colonnes Date/Heure début/Besoin ETP introuvables).', 'err');
+    return 0;
+  }
+  let count=0;
+  queueSet.add(queueLabel);
+  for(let r=headerRowIdx+1;r<rows.length;r++){
+    const row=rows[r]||[];
+    const dateRaw=row[dateCol];
+    if(dateRaw==null) continue;
+    const iso = parseAnyDateCell(dateRaw);
+    if(!iso) continue;
+    const hStart = parseTimeStrToMinutes(row[heureDebCol]);
+    if(hStart==null) continue;
+    const besoin = parseFloat(String(row[besoinCol]).replace(',','.'))||0;
+    // deux tranches de 30 min par heure reçoivent la même valeur (donnée horaire)
+    for(const offset of [0,30]){
+      const slotLabel = minToHHMM(hStart+offset);
+      const key = iso+'|'+slotLabel;
+      if(!besoinMap[key]) besoinMap[key] = {besoin:0, queues:{}};
+      besoinMap[key].besoin += besoin;
+      besoinMap[key].queues[queueLabel] = (besoinMap[key].queues[queueLabel]||0) + besoin;
+    }
+    count++;
+  }
+  logImport('✓ Feuille "'+queueLabel+'" : '+count+' lignes de besoin importées.', 'ok');
+  return count;
+}
+
+/* ---- Orchestrateur d'import ---- */
+function processWorkbook(wb){
+  importLogEl.innerHTML='';
+  STATE.employees=[]; STATE.besoinMap={}; STATE.besoinQueues=[]; STATE.dates=[];
+
+  const planningName = findPlanningSheetName(wb);
+  if(!planningName){
+    logImport('✗ Aucune feuille "Planning" trouvée dans le classeur.', 'err');
+    toast('Feuille Planning introuvable', 'err');
+    return false;
+  }
+  logImport('Feuille Planning détectée : "'+planningName+'"', '');
+  const planningRows = sheetToRows(wb, planningName);
+  STATE.employees = parsePlanningSheet(planningRows);
+  if(STATE.employees.length===0) return false;
+
+  const besoinNames = findBesoinSheetNames(wb);
+  if(besoinNames.length===0){
+    logImport('⚠ Aucune feuille "Besoin ETP" trouvée — la couverture ne pourra pas être calculée.', 'warn');
+  }
+  const queueSet = new Set();
+  besoinNames.forEach(n=>{
+    const label = n.replace(/besoin\s*(en)?\s*etp/i,'').trim() || n;
+    parseBesoinSheet(sheetToRows(wb,n), label, STATE.besoinMap, queueSet);
+  });
+  STATE.besoinQueues = Array.from(queueSet);
+
+  // dates = dates du planning (semaine planifiée)
+  const dateSet = new Set();
+  STATE.employees.forEach(e=> e.days.forEach(d=> dateSet.add(d.date)));
+  STATE.dates = Array.from(dateSet).sort();
+
+  if(STATE.dates.length===0){
+    logImport('✗ Aucune date exploitable trouvée dans le planning.', 'err');
+    return false;
+  }
+  logImport('✓ Période analysée : '+fmtDateFR(STATE.dates[0])+' → '+fmtDateFR(STATE.dates[STATE.dates.length-1]), 'ok');
+  return true;
+}
+/* ------------------------------------------------------------
+   3. MOTEUR DE CALCUL — EFFECTIFS / ETP / COUVERTURE
+   ------------------------------------------------------------ */
+function computeCoverage(){
+  STATE.coverage = {};
+  // pré-collecte de tous les intervalles de travail (avec filtre équipe/service/collab appliqué en aval au rendu,
+  // ici on calcule la couverture GLOBALE ; les filtres recalculent une sous-couverture à la demande via computeCoverageFiltered)
+  STATE.dates.forEach(date=>{
+    STATE.coverage[date] = computeCoverageForDate(date, STATE.employees);
+  });
+}
+
+function computeCoverageForDate(date, employees){
+  const [y,mo,da] = date.split('-').map(Number);
+  const dayMid = new Date(y,mo-1,da).getTime();
+  const rows = [];
+  for(let s=0;s<48;s++){
+    const slotStart = dayMid + s*30*60000;
+    const slotEnd = slotStart + 30*60000;
+    let reel=0, planifie=0;
+    for(const emp of employees){
+      for(const d of emp.days){
+        if(d.status!=='travail' || !d.workStart) continue;
+        if(d.workStart.getTime() < slotEnd && d.workEnd.getTime() > slotStart){
+          reel++;
+          let onBreak=false;
+          if(d.pauseStart && d.pauseStart.getTime() < slotEnd && d.pauseEnd.getTime() > slotStart) onBreak=true;
+          if(!onBreak) planifie++;
+        }
+      }
+    }
+    const slotLabel = STATE.slots[s];
+    const key = date+'|'+slotLabel;
+    const bEntry = STATE.besoinMap[key];
+    const besoin = bEntry ? round1(bEntry.besoin) : 0;
+    const hasBesoin = !!bEntry;
+    const ecart = round1(planifie - besoin);
+    const couverture = hasBesoin && besoin>0 ? round0((planifie/besoin)*100) : (hasBesoin? (planifie>0?999:100) : null);
+    rows.push({slot:slotLabel, besoin, planifie, reel, ecart, couverture, hasBesoin});
+  }
+  return rows;
+}
+
+/* Couverture recalculée à la volée selon les filtres actifs (équipe / service / collaborateur) */
+function getFilteredEmployees(){
+  const f = STATE.filters;
+  return STATE.employees.filter(e=>{
+    if(f.equipes.size>0 && !f.equipes.has(e.equipe)) return false;
+    if(f.services.size>0 && !f.services.has(e.service)) return false;
+    if(f.collab && e.nom!==f.collab) return false;
+    return true;
+  });
+}
+function getActiveDate(){
+  return STATE.filters.date || STATE.dates[0];
+}
+function getCurrentCoverage(){
+  const emps = getFilteredEmployees();
+  const filtersActive = STATE.filters.equipes.size>0 || STATE.filters.services.size>0 || !!STATE.filters.collab;
+  if(STATE.filters.granularity==='week'){
+    // moyenne (somme besoin/planifié) sur toutes les dates, par tranche
+    const acc = STATE.slots.map(s=>({slot:s,besoin:0,planifie:0,reel:0,hasBesoin:false,n:0}));
+    STATE.dates.forEach(date=>{
+      const rows = filtersActive ? computeCoverageForDate(date, emps) : STATE.coverage[date];
+      rows.forEach((r,i)=>{ acc[i].besoin+=r.besoin; acc[i].planifie+=r.planifie; acc[i].reel+=r.reel; acc[i].hasBesoin = acc[i].hasBesoin || r.hasBesoin; acc[i].n++; });
+    });
+    return acc.map(a=>{
+      const besoin = round1(a.besoin/a.n), planifie=round1(a.planifie/a.n), reel=round1(a.reel/a.n);
+      const ecart = round1(planifie-besoin);
+      const couverture = a.hasBesoin && besoin>0 ? round0((planifie/besoin)*100) : (a.hasBesoin?(planifie>0?999:100):null);
+      return {slot:a.slot, besoin, planifie, reel, ecart, couverture, hasBesoin:a.hasBesoin};
+    });
+  }
+  const date = getActiveDate();
+  return filtersActive ? computeCoverageForDate(date, emps) : STATE.coverage[date];
+}
+
+/* ------------------------------------------------------------
+   4. MOTEUR D'ALERTES
+   ------------------------------------------------------------ */
+function computeAlerts(){
+  const crit=[], warn=[], ok=[];
+  const emps = STATE.employees; // alertes calculées sur l'ensemble des données importées
+
+  // 1-5. Sous/sur effectif par tranche (sur la 1ère date pour lisibilité, agrégé toutes dates)
+  STATE.dates.forEach(date=>{
+    const rows = STATE.coverage[date];
+    rows.forEach(r=>{
+      if(!r.hasBesoin || r.besoin<=0) return;
+      const meta = {title:'', meta: fmtDateFR(date)+' — '+r.slot+'h  ·  Besoin '+r.besoin+' / Planifié '+r.planifie};
+      if(r.couverture<80){
+        crit.push({title:'Sous-effectif critique ('+r.couverture+'%)', meta:meta.meta});
+      } else if(r.couverture<95){
+        warn.push({title:'Sous-effectif modéré ('+r.couverture+'%)', meta:meta.meta});
+      } else if(r.couverture<=105){
+        ok.push({title:'Couverture optimale ('+r.couverture+'%)', meta:meta.meta});
+      } else if(r.couverture>105){
+        const item = {title:'Sur-effectif ('+r.couverture+'%)', meta:meta.meta};
+        (r.couverture>130?warn:ok).push(item);
+      }
+    });
+  });
+
+  // 6-10. Alertes RH / planning par collaborateur
+  emps.forEach(emp=>{
+    // total heures semaine (somme des durées travaillées)
+    let totalWeekMin=0;
+    emp.days.forEach(d=>{ if(d.status==='travail') totalWeekMin+= (d.dureeMin||0); });
+    if(totalWeekMin > 48*60){
+      crit.push({title:'Dépassement 48h/semaine', meta: emp.nom+' ('+emp.matricule+') — '+round1(totalWeekMin/60)+'h planifiées'});
+    }
+    emp.days.forEach(d=>{
+      if(d.status!=='travail' || !d.workStart) return;
+      const durH = (d.workEnd - d.workStart)/3600000;
+      if(durH>12){
+        crit.push({title:'Journée > 12h', meta: emp.nom+' — '+fmtDateFR(d.date)+' ('+round1(durH)+'h)'});
+      }
+      if(durH>=6 && !(d.pauseDurMin>0)){
+        warn.push({title:'Absence de pause', meta: emp.nom+' — '+fmtDateFR(d.date)+' ('+round1(durH)+'h sans pause)'});
+      }
+    });
+    // chevauchement d'horaires (2 jours qui se chevauchent dans le temps réel)
+    const workDays = emp.days.filter(d=>d.status==='travail' && d.workStart).sort((a,b)=>a.workStart-b.workStart);
+    for(let i=0;i<workDays.length-1;i++){
+      if(workDays[i].workEnd > workDays[i+1].workStart){
+        crit.push({title:"Chevauchement d'horaires", meta: emp.nom+' — '+fmtDateFR(workDays[i].date)+' / '+fmtDateFR(workDays[i+1].date)});
+      }
+    }
+  });
+
+  // 10. pauses simultanées excessives (par tranche, si >40% de l'effectif présent est en pause)
+  STATE.dates.forEach(date=>{
+    STATE.coverage[date].forEach(r=>{
+      if(r.reel>=6 && (r.reel-r.planifie) / r.reel > 0.4){
+        warn.push({title:'Pauses simultanées excessives', meta: fmtDateFR(date)+' — '+r.slot+'h : '+(r.reel-r.planifie)+'/'+r.reel+' agents en pause'});
+      }
+    });
+  });
+
+  STATE.alerts = {crit, warn, ok};
+}
+
+/* ------------------------------------------------------------
+   5. RECOMMANDATIONS AUTOMATIQUES
+   ------------------------------------------------------------ */
+function computeRecommendations(){
+  const recos=[];
+  const date = getActiveDate();
+  const rows = STATE.coverage[date] || [];
+  // détecter plages contiguës de déficit
+  let i=0;
+  while(i<rows.length){
+    if(rows[i].hasBesoin && rows[i].ecart<0){
+      let j=i;
+      let sumDef=0, cnt=0, maxDef=0;
+      while(j<rows.length && rows[j].hasBesoin && rows[j].ecart<0){ sumDef+=rows[j].ecart; maxDef=Math.min(maxDef,rows[j].ecart); cnt++; j++; }
+      const avgDef = round1(sumDef/cnt);
+      if(cnt>=2){
+        recos.push({
+          level: avgDef<=-3?'high':'med',
+          icon:'⚠️',
+          title: 'Déficit entre '+rows[i].slot+' et '+rows[j-1].slot,
+          desc: 'Déficit moyen de '+Math.abs(avgDef)+' ETP sur '+cnt+' tranches (pic à '+Math.abs(maxDef)+' ETP) le '+fmtDateFR(date)+'.',
+          actions: [
+            'Décaler '+Math.ceil(Math.abs(avgDef))+' agent(s) dont la prise de poste est proche de '+rows[i].slot,
+            'Optimiser le placement des pauses en dehors de cette plage',
+            'Ajouter un renfort ponctuel ou du temps supplémentaire',
+            'Revoir les heures de prise de poste sur cette tranche'
+          ]
+        });
+      }
+      i=j;
+    } else i++;
+  }
+  // surplus significatifs
+  i=0;
+  while(i<rows.length){
+    if(rows[i].hasBesoin && rows[i].couverture>130){
+      let j=i;
+      while(j<rows.length && rows[j].hasBesoin && rows[j].couverture>130) j++;
+      if(j-i>=2){
+        recos.push({
+          level:'med', icon:'📉',
+          title:'Sur-effectif entre '+rows[i].slot+' et '+rows[j-1].slot,
+          desc:'Couverture supérieure à 130% sur '+(j-i)+' tranches le '+fmtDateFR(date)+'. Ressource mobilisable ailleurs.',
+          actions:['Décaler une partie des effectifs vers les tranches en déficit','Proposer des pauses/formation sur ce créneau','Revoir les heures de prise de poste pour lisser la courbe']
+        });
+      }
+      i=j;
+    } else i++;
+  }
+  if(recos.length===0){
+    recos.push({level:'med', icon:'✅', title:'Couverture équilibrée', desc:'Aucun écart significatif détecté sur la période sélectionnée.', actions:['Poursuivre le suivi hebdomadaire de la couverture']});
+  }
+  return recos;
+}
+/* ------------------------------------------------------------
+   6. RENDU — FILTRES
+   ------------------------------------------------------------ */
+function populateFilters(){
+  const fDate = document.getElementById('fDate');
+  fDate.innerHTML = STATE.dates.map(d=>'<option value="'+d+'">'+fmtDateFR(d)+'</option>').join('');
+  fDate.value = STATE.filters.date || STATE.dates[0];
+
+  const equipes = Array.from(new Set(STATE.employees.map(e=>e.equipe))).sort();
+  const services = Array.from(new Set(STATE.employees.map(e=>e.service))).sort();
+  buildMultiselect('msEquipe', equipes, STATE.filters.equipes, 'Toutes');
+  buildMultiselect('msService', services, STATE.filters.services, 'Tous');
+
+  const fCollab = document.getElementById('fCollab');
+  const names = Array.from(new Set(STATE.employees.map(e=>e.nom))).sort();
+  fCollab.innerHTML = '<option value="">Tous les collaborateurs</option>' + names.map(n=>'<option value="'+n+'">'+n+'</option>').join('');
+
+  const searchDate = document.getElementById('searchDate');
+  searchDate.innerHTML = STATE.dates.map(d=>'<option value="'+d+'">'+fmtDateFR(d)+'</option>').join('');
+  const searchHeure = document.getElementById('searchHeure');
+  searchHeure.innerHTML = STATE.slots.map(s=>'<option value="'+s+'">'+s+'</option>').join('');
+}
+
+function buildMultiselect(id, options, selectedSet, allLabel){
+  const root = document.getElementById(id);
+  const btn = root.querySelector('.multiselect-btn');
+  const panel = root.querySelector('.multiselect-panel');
+  panel.innerHTML = options.map(o=>{
+    const checked = selectedSet.has(o) ? 'checked' : '';
+    return '<label class="ms-item"><input type="checkbox" value="'+o.replace(/"/g,'&quot;')+'" '+checked+'> '+o+'</label>';
+  }).join('');
+  function refreshBtn(){
+    const span = btn.querySelector('span');
+    btn.firstChild.textContent = selectedSet.size===0 ? allLabel+' ' : selectedSet.size+' sélectionné(s) ';
+  }
+  refreshBtn();
+  panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      if(cb.checked) selectedSet.add(cb.value); else selectedSet.delete(cb.value);
+      refreshBtn();
+      onFiltersChanged();
+    });
+  });
+  btn.onclick = (e)=>{
+    e.stopPropagation();
+    document.querySelectorAll('.multiselect-panel.open').forEach(p=>{ if(p!==panel) p.classList.remove('open'); });
+    panel.classList.toggle('open');
+  };
+}
+document.addEventListener('click', ()=> document.querySelectorAll('.multiselect-panel.open').forEach(p=>p.classList.remove('open')));
+
+function onFiltersChanged(){
+  renderAll();
+}
+
+/* ------------------------------------------------------------
+   7. RENDU — KPI
+   ------------------------------------------------------------ */
+function kpiCard(label, value, unit, color, icon, foot, footClass){
+  return '<div class="kpi-card kpi-'+color+'">'+
+    '<div class="kpi-top"><span class="kpi-label">'+label+'</span><span class="kpi-icon">'+icon+'</span></div>'+
+    '<div class="kpi-value">'+value+(unit?'<span class="kpi-unit">'+unit+'</span>':'')+'</div>'+
+    (foot?'<div class="kpi-foot '+(footClass||'')+'">'+foot+'</div>':'')+
+  '</div>';
+}
+
+function renderKPIs(){
+  const emps = getFilteredEmployees();
+  const rows = getCurrentCoverage();
+  const withBesoin = rows.filter(r=>r.hasBesoin);
+  const totalBesoin = round1(withBesoin.reduce((s,r)=>s+r.besoin,0));
+  const totalPlanifie = round1(rows.reduce((s,r)=>s+r.planifie,0));
+  const ecartGlobal = round1(totalPlanifie-totalBesoin);
+  const couvMoy = withBesoin.length? round0(withBesoin.reduce((s,r)=>s+ (r.couverture>999?999:r.couverture),0)/withBesoin.length) : 0;
+  const heuresPlanifiees = emps.reduce((s,e)=> s + e.days.filter(d=>d.status==='travail').reduce((s2,d)=> s2+((d.workEnd-d.workStart)/3600000),0), 0);
+  const agentsPlanifies = emps.filter(e=> e.days.some(d=>d.status==='travail')).length;
+  let heurePlusChargee = '–', heureMoinsCouv='–';
+  if(withBesoin.length){
+    const maxReel = rows.reduce((a,b)=> b.reel>a.reel? b:a, rows[0]);
+    heurePlusChargee = maxReel.slot;
+    const minCouv = withBesoin.reduce((a,b)=> b.couverture<a.couverture? b:a, withBesoin[0]);
+    heureMoinsCouv = minCouv.slot+' ('+minCouv.couverture+'%)';
+  }
+  const sousEffectifs = withBesoin.filter(r=>r.couverture<95).length;
+  const surEffectifs = withBesoin.filter(r=>r.couverture>105).length;
+  const alertesCrit = STATE.alerts.crit.length;
+
+  document.getElementById('kpiGrid').innerHTML = [
+    kpiCard('Collaborateurs', emps.length, '', 'navy', '👥'),
+    kpiCard('Agents planifiés', agentsPlanifies, '', 'navy', '🗓'),
+    kpiCard('Heures planifiées', round0(heuresPlanifiees), 'h', 'navy', '⏱'),
+    kpiCard('Besoin ETP total', totalBesoin, '', 'orange', '🎯'),
+    kpiCard('ETP planifié total', totalPlanifie, '', 'green', '✅'),
+    kpiCard('Écart global', (ecartGlobal>=0?'+':'')+ecartGlobal, '', ecartGlobal<0?'red':'green', '⚖️'),
+    kpiCard('Couverture moyenne', couvMoy, '%', couvMoy<95?'orange':(couvMoy>105?'navy':'green'), '📈'),
+    kpiCard('Heure la plus chargée', heurePlusChargee, '', 'navy', '🔥'),
+    kpiCard('Heure la moins couverte', heureMoinsCouv, '', 'red', '📉'),
+    kpiCard('Sous-effectifs', sousEffectifs, 'tranches', 'orange', '🔻'),
+    kpiCard('Sur-effectifs', surEffectifs, 'tranches', 'navy', '🔺'),
+    kpiCard('Alertes critiques', alertesCrit, '', 'red', '🚨'),
+  ].join('');
+}
+
+function renderAnalysisKPIs(){
+  const rows = getCurrentCoverage();
+  const withBesoin = rows.filter(r=>r.hasBesoin);
+  const totalBesoin = round1(withBesoin.reduce((s,r)=>s+r.besoin,0));
+  const totalPlanifie = round1(rows.reduce((s,r)=>s+r.planifie,0));
+  const manque = round1(withBesoin.filter(r=>r.ecart<0).reduce((s,r)=>s+Math.abs(r.ecart),0));
+  const surplus = round1(rows.filter(r=>r.hasBesoin && r.ecart>0).reduce((s,r)=>s+r.ecart,0));
+  const couvMoy = withBesoin.length? round0(withBesoin.reduce((s,r)=>s+ (r.couverture>999?999:r.couverture),0)/withBesoin.length) : 0;
+  const sousCouvertes = withBesoin.filter(r=>r.couverture<95).length;
+  const surCouvertes = withBesoin.filter(r=>r.couverture>105).length;
+  const maxReel = rows.length? rows.reduce((a,b)=> b.reel>a.reel? b:a, rows[0]) : null;
+  const minCouv = withBesoin.length? withBesoin.reduce((a,b)=> b.couverture<a.couverture? b:a, withBesoin[0]) : null;
+  const maxCouv = withBesoin.length? withBesoin.reduce((a,b)=> b.couverture>a.couverture? b:a, withBesoin[0]) : null;
+
+  document.getElementById('analysisKpiGrid').innerHTML = [
+    kpiCard('Taux de couverture moyen', couvMoy, '%', couvMoy<95?'orange':'green', '📊'),
+    kpiCard('Écart total ETP', (totalPlanifie-totalBesoin>=0?'+':'')+round1(totalPlanifie-totalBesoin), '', 'navy', '⚖️'),
+    kpiCard('Manque total ETP', manque, '', 'red', '🔻'),
+    kpiCard('Surplus total ETP', surplus, '', 'navy', '🔺'),
+    kpiCard('Heure la plus critique', minCouv?minCouv.slot+' ('+minCouv.couverture+'%)':'–', '', 'red', '🚨'),
+    kpiCard('Heure la plus surdimensionnée', maxCouv?maxCouv.slot+' ('+maxCouv.couverture+'%)':'–', '', 'navy', '📈'),
+    kpiCard('Tranches sous-couvertes', sousCouvertes, '/ '+withBesoin.length, 'orange', '🔻'),
+    kpiCard('Tranches sur-couvertes', surCouvertes, '/ '+withBesoin.length, 'navy', '🔺'),
+  ].join('');
+
+  // score
+  const score = couvMoy>105 ? Math.max(0,100-(couvMoy-105)) : couvMoy;
+  renderScore(Math.min(100,Math.max(0,score||0)), couvMoy);
+  document.getElementById('statEcartTotal').textContent = (totalPlanifie-totalBesoin>=0?'+':'')+round1(totalPlanifie-totalBesoin)+' ETP';
+  document.getElementById('statManqueTotal').textContent = '-'+manque+' ETP';
+  document.getElementById('statSurplusTotal').textContent = '+'+surplus+' ETP';
+  document.getElementById('statHeureCritique').textContent = minCouv?minCouv.slot+' ('+minCouv.couverture+'%)':'–';
+  document.getElementById('statHeureSur').textContent = maxCouv?maxCouv.slot+' ('+maxCouv.couverture+'%)':'–';
+}
+
+function renderScore(score, couvMoy){
+  const r=60, c=2*Math.PI*r;
+  const pct = Math.min(100,Math.max(0,score));
+  const offset = c*(1-pct/100);
+  let color = '#178A4C';
+  if(couvMoy<80) color='#C22B2B'; else if(couvMoy<95) color='#B8690A'; else if(couvMoy>105) color='#2454B0';
+  const label = couvMoy<80?'Critique':couvMoy<95?'À surveiller':couvMoy<=105?'Optimal':'Sur-effectif';
+  document.getElementById('scoreWrap').innerHTML = `
+    <div class="score-ring">
+      <svg width="150" height="150" viewBox="0 0 150 150">
+        <circle cx="75" cy="75" r="${r}" fill="none" stroke="#EEF1F5" stroke-width="14"/>
+        <circle cx="75" cy="75" r="${r}" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"
+          stroke-dasharray="${c}" stroke-dashoffset="${offset}" style="transition:stroke-dashoffset .6s ease;"/>
+      </svg>
+      <div class="score-num"><span class="n">${round0(pct)}%</span><span class="l">Score global</span></div>
+    </div>
+    <div class="score-status" style="background:${color}22;color:${color};">${label}</div>
+  `;
+}
+/* ------------------------------------------------------------
+   8. GRAPHIQUES (Chart.js)
+   ------------------------------------------------------------ */
+function destroyChart(key){ if(STATE.charts[key]){ STATE.charts[key].destroy(); delete STATE.charts[key]; } }
+
+function renderMainChart(){
+  const rows = getCurrentCoverage();
+  destroyChart('main');
+  const ctx = document.getElementById('chartMain').getContext('2d');
+  STATE.charts.main = new Chart(ctx, {
+    type:'line',
+    data:{ labels: rows.map(r=>r.slot),
+      datasets:[
+        {label:'Besoin ETP', data: rows.map(r=>r.hasBesoin?r.besoin:null), borderColor:'#B8690A', backgroundColor:'rgba(184,105,10,.08)', borderWidth:2, pointRadius:0, tension:.3, fill:false},
+        {label:'ETP planifié', data: rows.map(r=>r.planifie), borderColor:'#2454B0', backgroundColor:'rgba(36,84,176,.12)', borderWidth:2.5, pointRadius:0, tension:.3, fill:true},
+      ]},
+    options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'top', labels:{boxWidth:12,font:{size:11}}}, tooltip:{titleFont:{size:11},bodyFont:{size:11}}},
+      scales:{ x:{ticks:{maxTicksLimit:12,font:{size:10}}, grid:{display:false}}, y:{beginAtZero:true, ticks:{font:{size:10}}, grid:{color:'#EEF1F5'}} } }
+  });
+}
+
+function renderCoverageDayChart(){
+  const rows = getCurrentCoverage();
+  destroyChart('covDay');
+  const ctx = document.getElementById('chartCoverageDay').getContext('2d');
+  const colors = rows.map(r=> r.hasBesoin ? (r.couverture<80?'#C22B2B':r.couverture<95?'#F0921E':r.couverture<=105?'#1FAE63':'#2454B0') : '#DCE3ED');
+  STATE.charts.covDay = new Chart(ctx, {
+    data:{ labels: rows.map(r=>r.slot),
+      datasets:[
+        {type:'bar', label:'Écart ETP (planifié - besoin)', data: rows.map(r=>r.hasBesoin?r.ecart:null), backgroundColor: colors, borderRadius:3, order:2},
+        {type:'line', label:'Besoin ETP', data: rows.map(r=>r.hasBesoin?r.besoin:null), borderColor:'#0A1F3D', borderDash:[4,3], pointRadius:0, borderWidth:1.5, yAxisID:'y1', order:1},
+      ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'top', labels:{boxWidth:12,font:{size:11}}}},
+      scales:{ x:{ticks:{maxTicksLimit:16,font:{size:10}}, grid:{display:false}},
+        y:{title:{display:true,text:'Écart ETP',font:{size:10}}, grid:{color:'#EEF1F5'}, ticks:{font:{size:10}}},
+        y1:{position:'right', grid:{display:false}, title:{display:true,text:'Besoin ETP',font:{size:10}}, ticks:{font:{size:10}}} } }
+  });
+}
+
+function renderEffectifChart(){
+  const rows = getCurrentCoverage();
+  destroyChart('effectif');
+  const ctx = document.getElementById('chartEffectif').getContext('2d');
+  STATE.charts.effectif = new Chart(ctx, {
+    type:'line',
+    data:{ labels: rows.map(r=>r.slot), datasets:[
+      {label:'Effectif présent', data: rows.map(r=>r.reel), borderColor:'#3B7DDE', backgroundColor:'rgba(59,125,222,.15)', fill:true, tension:.3, pointRadius:0, borderWidth:2},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{maxTicksLimit:12,font:{size:10}},grid:{display:false}}, y:{beginAtZero:true,ticks:{font:{size:10}},grid:{color:'#EEF1F5'}}}}
+  });
+}
+
+function renderEquipeChart(){
+  const emps = getFilteredEmployees();
+  const counts = {};
+  emps.forEach(e=> counts[e.equipe] = (counts[e.equipe]||0)+1);
+  const labels = Object.keys(counts), data = Object.values(counts);
+  destroyChart('equipe');
+  const ctx = document.getElementById('chartEquipe').getContext('2d');
+  const palette = ['#0A1F3D','#2454B0','#3B7DDE','#1FAE63','#F0921E','#C22B2B','#7FB0F2'];
+  STATE.charts.equipe = new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{label:'Collaborateurs', data, backgroundColor: labels.map((_,i)=>palette[i%palette.length]), borderRadius:6}] },
+    options:{responsive:true,maintainAspectRatio:false, indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true,ticks:{font:{size:10}}},y:{ticks:{font:{size:10.5}}}}}
+  });
+}
+
+function renderHeuresCollabChart(){
+  const emps = getFilteredEmployees();
+  const buckets = {'0-10h':0,'10-20h':0,'20-30h':0,'30-35h':0,'35-40h':0,'40-48h':0,'>48h':0};
+  emps.forEach(e=>{
+    const totalH = e.days.filter(d=>d.status==='travail').reduce((s,d)=>s+((d.workEnd-d.workStart)/3600000),0);
+    if(totalH<=10) buckets['0-10h']++; else if(totalH<=20) buckets['10-20h']++; else if(totalH<=30) buckets['20-30h']++;
+    else if(totalH<=35) buckets['30-35h']++; else if(totalH<=40) buckets['35-40h']++; else if(totalH<=48) buckets['40-48h']++; else buckets['>48h']++;
+  });
+  destroyChart('heuresCollab');
+  const ctx = document.getElementById('chartHeuresCollab').getContext('2d');
+  STATE.charts.heuresCollab = new Chart(ctx, {
+    type:'bar',
+    data:{ labels:Object.keys(buckets), datasets:[{label:'Collaborateurs', data:Object.values(buckets), backgroundColor:'#3B7DDE', borderRadius:6}] },
+    options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{font:{size:10}}},x:{ticks:{font:{size:10}}}}}
+  });
+}
+
+function renderEcartsChart(){
+  const rows = getCurrentCoverage().filter(r=>r.hasBesoin);
+  destroyChart('ecarts');
+  const ctx = document.getElementById('chartEcarts').getContext('2d');
+  STATE.charts.ecarts = new Chart(ctx, {
+    type:'bar',
+    data:{ labels: rows.map(r=>r.slot), datasets:[{label:'Écart (Planifié - Besoin)', data: rows.map(r=>r.ecart),
+      backgroundColor: rows.map(r=> r.ecart<0?'#C22B2B':'#2454B0'), borderRadius:3}] },
+    options:{responsive:true,maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{x:{ticks:{maxTicksLimit:14,font:{size:10}},grid:{display:false}}, y:{ticks:{font:{size:10}},grid:{color:'#EEF1F5'}}}}
+  });
+}
+
+/* ------------------------------------------------------------
+   9. HEATMAP
+   ------------------------------------------------------------ */
+function renderHeatmap(){
+  const table = document.getElementById('heatmapTable');
+  const hourSlots = STATE.slots.filter((_,i)=>i%2===0); // affichage par heure pleine pour lisibilité
+  const filtersActive = STATE.filters.equipes.size>0 || STATE.filters.services.size>0 || !!STATE.filters.collab;
+  const emps = getFilteredEmployees();
+  let html = '<thead><tr><th class="rowlabel">Date \\ Heure</th>' + hourSlots.map(s=>'<th>'+s+'</th>').join('') + '</tr></thead><tbody>';
+  STATE.dates.forEach(date=>{
+    const rows = filtersActive ? computeCoverageForDate(date, emps) : STATE.coverage[date];
+    html += '<tr><td class="rowlabel">'+fmtDateFR(date)+'</td>';
+    hourSlots.forEach(s=>{
+      const idx = STATE.slots.indexOf(s);
+      const r = rows[idx];
+      const col = couvColor(r.hasBesoin? r.couverture : null, r.hasBesoin);
+      const title = r.hasBesoin ? (s+'h — Besoin '+r.besoin+' / Planifié '+r.planifie+' ('+r.couverture+'%)') : s+'h — Sans donnée de besoin';
+      html += '<td style="background:'+col.bg+';color:'+col.fg+';" title="'+title+'">'+(r.hasBesoin? r.couverture+'%':'') +'</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+/* ------------------------------------------------------------
+   10. TABLEAUX (couverture, alertes, recommandations, effectifs)
+   ------------------------------------------------------------ */
+function renderCoverageTable(filterTxt){
+  const rows = getCurrentCoverage();
+  const q = norm(filterTxt||'');
+  const tbody = document.getElementById('coverageTbody');
+  tbody.innerHTML = rows.filter(r=> !q || r.slot.includes(q)).map(r=>{
+    const badge = statusBadge(r.hasBesoin?r.couverture:null, r.hasBesoin);
+    return '<tr><td><strong>'+r.slot+'</strong></td>'+
+      '<td class="num">'+(r.hasBesoin?r.besoin:'—')+'</td>'+
+      '<td class="num">'+r.planifie+'</td>'+
+      '<td class="num">'+r.reel+'</td>'+
+      '<td class="num" style="color:'+(r.ecart<0?'var(--red)':r.ecart>0?'var(--blue-surplus)':'var(--text-700)')+';font-weight:700;">'+(r.hasBesoin?((r.ecart>=0?'+':'')+r.ecart):'—')+'</td>'+
+      '<td class="num" style="font-weight:700;">'+(r.hasBesoin?(r.couverture>999?'—':r.couverture+'%'):'—')+'</td>'+
+      '<td>'+badge+'</td></tr>';
+  }).join('');
+  document.getElementById('coverageDateLabel').textContent = STATE.filters.granularity==='week' ? 'Moyenne semaine' : fmtDateFR(getActiveDate());
+}
+
+function renderAlerts(){
+  computeAlerts();
+  const {crit,warn,ok} = STATE.alerts;
+  document.getElementById('countCrit').textContent = crit.length;
+  document.getElementById('countWarn').textContent = warn.length;
+  document.getElementById('countOk').textContent = ok.length;
+  const render = (list, id, emptyMsg)=>{
+    const el = document.getElementById(id);
+    if(list.length===0){ el.innerHTML = '<div class="alert-empty">'+emptyMsg+'</div>'; return; }
+    el.innerHTML = list.slice(0,300).map(a=>'<div class="alert-item"><div class="a-title">'+a.title+'</div><div class="a-meta">'+a.meta+'</div></div>').join('');
+  };
+  render(crit,'listCrit','Aucune alerte critique 🎉');
+  render(warn,'listWarn','Rien à surveiller pour le moment');
+  render(ok,'listOk','Aucune tranche conforme détectée');
+
+  const alertTab = document.querySelector('.top-tab[data-view="view-alerts"]');
+  alertTab.classList.toggle('has-alert', crit.length>0);
+}
+
+function renderRecommendations(){
+  const recos = computeRecommendations();
+  document.getElementById('recoList').innerHTML = recos.map(r=>{
+    return '<div class="reco-item '+r.level+'"><div class="reco-icon">'+r.icon+'</div>'+
+      '<div class="reco-body"><h4>'+r.title+'</h4><p>'+r.desc+'</p>'+
+      (r.actions?('<ul>'+r.actions.map(a=>'<li>'+a+'</li>').join('')+'</ul>'):'')+
+      '</div></div>';
+  }).join('');
+}
+
+function renderEmployeesTable(filterTxt){
+  const emps = getFilteredEmployees();
+  const date = getActiveDate();
+  const q = norm(filterTxt||'');
+  document.getElementById('employeesSub').textContent = emps.length+' collaborateur(s) — statut affiché pour le '+fmtDateFR(date);
+  const tbody = document.getElementById('employeesTbody');
+  const filtered = emps.filter(e=> !q || norm(e.nom).includes(q) || norm(e.matricule).includes(q));
+  tbody.innerHTML = filtered.map(e=>{
+    const d = e.days.find(dd=>dd.date===date);
+    let statusHtml='<span class="badge badge-grey">—</span>', deb='—',fin='—',pause='—',duree='—';
+    if(d){
+      if(d.status==='travail'){
+        statusHtml='<span class="badge badge-green">Travail</span>';
+        deb = minToHHMM(d.workStart.getHours()*60+d.workStart.getMinutes());
+        fin = minToHHMM(d.workEnd.getHours()*60+d.workEnd.getMinutes());
+        pause = d.raw.pause||'—';
+        duree = round1(d.dureeMin/60)+'h';
+      } else if(d.status==='repos'){ statusHtml='<span class="badge badge-grey">Repos</span>'; }
+      else if(d.status==='conge'){ statusHtml='<span class="badge badge-blue">Congé</span>'; }
+      else { statusHtml='<span class="badge badge-orange">'+(d.raw.debut||'Autre')+'</span>'; }
+    }
+    return '<tr><td>'+(e.matricule||'—')+'</td><td><strong>'+e.nom+'</strong></td><td>'+e.equipe+'</td><td>'+e.service+'</td><td>'+statusHtml+'</td>'+
+      '<td class="num">'+deb+'</td><td class="num">'+fin+'</td><td class="num">'+pause+'</td><td class="num">'+duree+'</td></tr>';
+  }).join('');
+}
+
+/* ------------------------------------------------------------
+   11. RECHERCHE INTERACTIVE
+   ------------------------------------------------------------ */
+function runSearch(){
+  const date = document.getElementById('searchDate').value;
+  const heure = document.getElementById('searchHeure').value;
+  const emps = getFilteredEmployees();
+  const rows = STATE.filters.equipes.size||STATE.filters.services.size||STATE.filters.collab ? computeCoverageForDate(date, emps) : STATE.coverage[date];
+  const idx = STATE.slots.indexOf(heure);
+  const r = rows[idx];
+  const badge = statusBadge(r.hasBesoin?r.couverture:null, r.hasBesoin);
+  document.getElementById('searchResults').innerHTML = [
+    ['Effectif présent', r.reel, ''],
+    ['Besoin ETP', r.hasBesoin? r.besoin : '—', ''],
+    ['ETP planifié', r.planifie, ''],
+    ['Écart', r.hasBesoin? ((r.ecart>=0?'+':'')+r.ecart) : '—', ''],
+    ['Couverture', r.hasBesoin? (r.couverture>999?'—':r.couverture+'%') : '—', ''],
+  ].map(([l,v])=>'<div class="result-card"><div class="rv">'+v+'</div><div class="rl">'+l+'</div></div>').join('')
+  + '<div class="result-card" style="grid-column:1/-1;"><div style="margin-bottom:6px;font-size:10.5px;font-weight:800;color:var(--text-400);text-transform:uppercase;">Statut</div>'+badge+'</div>';
+}
+/* ------------------------------------------------------------
+   12. EXPORTS (Excel / CSV / PDF)
+   ------------------------------------------------------------ */
+function buildExportContext(){
+  const rows = getCurrentCoverage();
+  const dateLabel = STATE.filters.granularity==='week' ? 'Moyenne semaine' : fmtDateFR(getActiveDate());
+  return {rows, dateLabel};
+}
+
+function exportExcel(){
+  const {rows, dateLabel} = buildExportContext();
+  const wb = XLSX.utils.book_new();
+
+  const kpiSheetData = [
+    ['Indicateur','Valeur'],
+    ['Période', dateLabel],
+    ['Collaborateurs', getFilteredEmployees().length],
+    ['Besoin ETP total', round1(rows.filter(r=>r.hasBesoin).reduce((s,r)=>s+r.besoin,0))],
+    ['ETP planifié total', round1(rows.reduce((s,r)=>s+r.planifie,0))],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(kpiSheetData), 'KPI');
+
+  const covData = [['Heure','Besoin ETP','ETP Planifié','Effectif réel','Écart','Couverture %']]
+    .concat(rows.map(r=>[r.slot, r.hasBesoin?r.besoin:'', r.planifie, r.reel, r.hasBesoin?r.ecart:'', r.hasBesoin?r.couverture:'']));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(covData), 'Couverture');
+
+  const alertRows = [['Priorité','Titre','Détail']];
+  STATE.alerts.crit.forEach(a=>alertRows.push(['Critique',a.title,a.meta]));
+  STATE.alerts.warn.forEach(a=>alertRows.push(['À surveiller',a.title,a.meta]));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(alertRows), 'Alertes');
+
+  XLSX.writeFile(wb, 'TDB_Planning_Export.xlsx');
+  toast('Export Excel généré','ok');
+}
+
+function exportCSV(){
+  const {rows} = buildExportContext();
+  let csv = 'Heure;Besoin ETP;ETP Planifie;Effectif reel;Ecart;Couverture %\n';
+  rows.forEach(r=>{
+    csv += [r.slot, r.hasBesoin?r.besoin:'', r.planifie, r.reel, r.hasBesoin?r.ecart:'', r.hasBesoin?r.couverture:''].join(';')+'\n';
+  });
+  const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'TDB_Planning_Couverture.csv';
+  a.click();
+  toast('Export CSV généré','ok');
+}
+
+function exportPDF(){
+  const {rows, dateLabel} = buildExportContext();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation:'landscape', unit:'pt'});
+  doc.setFontSize(16); doc.setTextColor(10,31,61);
+  doc.text('TDB Planning WFM — Rapport de couverture', 40, 40);
+  doc.setFontSize(10); doc.setTextColor(90,100,120);
+  doc.text('Période analysée : '+dateLabel, 40, 58);
+
+  const withBesoin = rows.filter(r=>r.hasBesoin);
+  const totalBesoin = round1(withBesoin.reduce((s,r)=>s+r.besoin,0));
+  const totalPlanifie = round1(rows.reduce((s,r)=>s+r.planifie,0));
+  const couvMoy = withBesoin.length? round0(withBesoin.reduce((s,r)=>s+Math.min(r.couverture,999),0)/withBesoin.length):0;
+  doc.autoTable({
+    startY: 72, theme:'plain', styles:{fontSize:9},
+    head:[['Collaborateurs','Besoin ETP total','ETP planifié total','Couverture moyenne']],
+    body:[[String(getFilteredEmployees().length), String(totalBesoin), String(totalPlanifie), couvMoy+'%']],
+    headStyles:{fillColor:[10,31,61], textColor:255}
+  });
+
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY+16,
+    head:[['Heure','Besoin ETP','ETP Planifié','Effectif réel','Écart','Couverture %']],
+    body: rows.map(r=>[r.slot, r.hasBesoin?r.besoin:'—', r.planifie, r.reel, r.hasBesoin?r.ecart:'—', r.hasBesoin?r.couverture+'%':'—']),
+    styles:{fontSize:8}, headStyles:{fillColor:[10,31,61], textColor:255},
+    didParseCell: function(data){
+      if(data.section==='body' && data.column.index===5){
+        const raw = rows[data.row.index];
+        if(raw && raw.hasBesoin){
+          if(raw.couverture<80) data.cell.styles.textColor=[194,43,43];
+          else if(raw.couverture<95) data.cell.styles.textColor=[184,105,10];
+          else if(raw.couverture<=105) data.cell.styles.textColor=[23,138,76];
+          else data.cell.styles.textColor=[36,84,176];
+        }
+      }
+    }
+  });
+
+  const critList = STATE.alerts.crit.slice(0,25);
+  if(critList.length){
+    doc.addPage();
+    doc.setFontSize(13); doc.setTextColor(194,43,43); doc.text('Alertes critiques', 40, 40);
+    doc.autoTable({ startY:52, head:[['Titre','Détail']], body: critList.map(a=>[a.title,a.meta]),
+      styles:{fontSize:9}, headStyles:{fillColor:[194,43,43], textColor:255} });
+  }
+  doc.save('TDB_Planning_Rapport.pdf');
+  toast('Export PDF généré','ok');
+}
+
+/* ------------------------------------------------------------
+   13. RENDU GLOBAL / NAVIGATION
+   ------------------------------------------------------------ */
+function renderAll(){
+  computeAlerts();
+  renderKPIs();
+  renderMainChart();
+  renderHeatmap();
+  renderCoverageTable(document.getElementById('coverageSearch').value);
+  renderCoverageDayChart();
+  renderAlerts();
+  renderAnalysisKPIs();
+  renderRecommendations();
+  renderEffectifChart();
+  renderEquipeChart();
+  renderHeuresCollabChart();
+  renderEcartsChart();
+  renderEmployeesTable(document.getElementById('employeeSearch').value);
+}
+
+function switchView(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.top-tab').forEach(t=>t.classList.toggle('active', t.dataset.view===id));
+}
+
+/* ------------------------------------------------------------
+   14. EVENEMENTS
+   ------------------------------------------------------------ */
+document.getElementById('topTabs').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.top-tab');
+  if(!btn) return;
+  if(!STATE.loaded){ toast('Importez un fichier pour accéder au tableau de bord','err'); return; }
+  switchView(btn.dataset.view);
+});
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.addEventListener('click', ()=>fileInput.click());
+dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.classList.add('dragover');});
+dropzone.addEventListener('dragleave', ()=> dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e=>{
+  e.preventDefault(); dropzone.classList.remove('dragover');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{ if(e.target.files.length) handleFile(e.target.files[0]); });
+
+function handleFile(file){
+  const validExt = /\.(xlsx|xls)$/i.test(file.name);
+  if(!validExt){ logImport('✗ Format de fichier non supporté : '+file.name, 'err'); return; }
+  logImport('Lecture du fichier "'+file.name+'"…', '');
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const data = new Uint8Array(ev.target.result);
+      const wb = XLSX.read(data, {type:'array', cellDates:true});
+      const ok = processWorkbook(wb);
+      if(ok){
+        STATE.loaded = true;
+        document.getElementById('importActions').style.display='block';
+        toast('Fichier importé avec succès','ok');
+      }
+    }catch(err){
+      logImport('✗ Erreur lors de la lecture du fichier : '+err.message, 'err');
+      toast('Erreur import','err');
+    }
+  };
+  reader.onerror = ()=> logImport('✗ Erreur de lecture du fichier.', 'err');
+  reader.readAsArrayBuffer(file);
+}
+
+document.getElementById('btnLoadDashboard').addEventListener('click', ()=>{
+  STATE.filters.date = STATE.dates[0];
+  STATE.filters.equipes = new Set();
+  STATE.filters.services = new Set();
+  STATE.filters.collab = '';
+  computeCoverage();
+  populateFilters();
+  document.getElementById('filterbar').classList.remove('hidden');
+  switchView('view-overview');
+  renderAll();
+});
+
+document.getElementById('btnReimport').addEventListener('click', ()=>{
+  switchView('view-import');
+  document.getElementById('filterbar').classList.add('hidden');
+});
+
+document.getElementById('fDate').addEventListener('change', e=>{ STATE.filters.date = e.target.value; onFiltersChanged(); });
+document.getElementById('fCollab').addEventListener('change', e=>{ STATE.filters.collab = e.target.value; onFiltersChanged(); });
+document.getElementById('fGranularity').addEventListener('change', e=>{ STATE.filters.granularity = e.target.value; onFiltersChanged(); });
+document.getElementById('btnResetFilters').addEventListener('click', ()=>{
+  STATE.filters.equipes = new Set(); STATE.filters.services = new Set(); STATE.filters.collab='';
+  STATE.filters.date = STATE.dates[0]; STATE.filters.granularity='day';
+  document.getElementById('fCollab').value='';
+  document.getElementById('fGranularity').value='day';
+  document.getElementById('fDate').value = STATE.dates[0];
+  populateFilters();
+  onFiltersChanged();
+});
+
+document.getElementById('coverageSearch').addEventListener('input', e=> renderCoverageTable(e.target.value));
+document.getElementById('employeeSearch').addEventListener('input', e=> renderEmployeesTable(e.target.value));
+document.getElementById('btnSearchGo').addEventListener('click', runSearch);
+
+const exportModal = document.getElementById('exportModal');
+document.getElementById('btnExportMenu').addEventListener('click', ()=>{
+  if(!STATE.loaded){ toast("Importez un fichier avant d'exporter",'err'); return; }
+  exportModal.classList.add('open');
+});
+document.getElementById('closeExportModal').addEventListener('click', ()=> exportModal.classList.remove('open'));
+exportModal.addEventListener('click', e=>{ if(e.target===exportModal) exportModal.classList.remove('open'); });
+document.getElementById('exportExcel').addEventListener('click', ()=>{ exportExcel(); exportModal.classList.remove('open'); });
+document.getElementById('exportCSV').addEventListener('click', ()=>{ exportCSV(); exportModal.classList.remove('open'); });
+document.getElementById('exportPDF').addEventListener('click', ()=>{ exportPDF(); exportModal.classList.remove('open'); });
+
+})();
+</script>
+</body>
+</html>
